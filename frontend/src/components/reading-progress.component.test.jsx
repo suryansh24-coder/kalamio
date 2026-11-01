@@ -31,6 +31,7 @@ const SectionHarness = ({ headings = ["Intro", "Setup", "Usage"], levels = [] })
                 targetRef={articleRef}
                 contentRef={contentRef}
                 resetKey="blog-1"
+                content={headings}
             />
         </>
     );
@@ -204,6 +205,17 @@ describe("ReadingProgress", () => {
         expect(screen.getByRole("button", { name: /contents/i })).toBeInTheDocument();
     });
 
+    it("re-discovers sections when the article content arrives later", () => {
+        const { rerender } = render(<SectionHarness headings={[]} />);
+        expect(screen.getByRole("progressbar")).toBeInTheDocument();
+
+        rerender(<SectionHarness headings={["Intro", "Setup"]} />);
+
+        expect(navIndicator()).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Setup" })).toBeInTheDocument();
+    });
+
     it("moves the active tick as the reader scrolls through sections", () => {
         render(<SectionHarness />);
 
@@ -296,6 +308,38 @@ describe("ReadingProgress", () => {
 
         expect(scrollSpy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("moves focus into the sheet and restores it to the Contents button", () => {
+        render(<SectionHarness />);
+
+        const contentsButton = screen.getByRole("button", { name: /contents/i });
+        fireEvent.click(contentsButton);
+
+        const closeButton = screen.getByRole("button", { name: "Close contents" });
+        expect(closeButton).toHaveFocus();
+
+        fireEvent.click(closeButton);
+        expect(contentsButton).toHaveFocus();
+    });
+
+    it("keeps Tab focus inside the phone sheet", () => {
+        render(<SectionHarness />);
+
+        fireEvent.click(screen.getByRole("button", { name: /contents/i }));
+
+        const closeButton = screen.getByRole("button", { name: "Close contents" });
+        const lastHeading = within(screen.getByRole("dialog")).getByRole("button", {
+            name: "Usage",
+        });
+
+        lastHeading.focus();
+        fireEvent.keyDown(document, { key: "Tab" });
+        expect(closeButton).toHaveFocus();
+
+        closeButton.focus();
+        fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+        expect(lastHeading).toHaveFocus();
     });
 
     it("closes the phone sheet with its button, the backdrop and Escape", () => {

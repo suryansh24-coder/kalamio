@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 
 const TICK_COUNT = 15;
@@ -13,11 +13,12 @@ const HEADER_OFFSET = 80;
 // When the article body has two or more headings, the column switches to one tick per section and
 // the active tick follows the heading the reader is in. On narrow screens those same sections are
 // offered through a fixed "Contents" button that opens a sheet.
-const ReadingProgress = ({ targetRef, contentRef, resetKey }) => {
+const ReadingProgress = ({ targetRef, contentRef, resetKey, content }) => {
     const indicatorRef = useRef(null);
     const tickRefs = useRef([]);
     const contentsButtonRef = useRef(null);
     const closeButtonRef = useRef(null);
+    const sheetRef = useRef(null);
     const [sections, setSections] = useState([]);
     const [activeIndex, setActiveIndex] = useState(0);
     const [sheetOpen, setSheetOpen] = useState(false);
@@ -26,7 +27,7 @@ const ReadingProgress = ({ targetRef, contentRef, resetKey }) => {
 
     // Collect the headings rendered inside the article body. Refs to the elements are kept so we can
     // scroll to them without writing ids into the saved article content.
-    useLayoutEffect(() => {
+    useEffect(() => {
         const container = contentRef?.current || targetRef?.current;
         if (!container) {
             setSections([]);
@@ -45,7 +46,7 @@ const ReadingProgress = ({ targetRef, contentRef, resetKey }) => {
         setSections(next);
         setActiveIndex(0);
         setSheetOpen(false);
-    }, [contentRef, targetRef, resetKey]);
+    }, [contentRef, targetRef, resetKey, content]);
 
     useEffect(() => {
         const target = targetRef.current;
@@ -134,17 +135,44 @@ const ReadingProgress = ({ targetRef, contentRef, resetKey }) => {
         };
     }, [targetRef, resetKey, hasSections, sections]);
 
-    // Close the Contents sheet with Esc, and move focus into it when it opens.
+    // Close the Contents sheet with Esc, move focus into it when it opens, keep Tab inside it, and
+    // restore focus to the trigger when it closes.
     useEffect(() => {
         if (!sheetOpen) return;
 
+        const sheet = sheetRef.current;
+
         const handleKey = (event) => {
-            if (event.key === "Escape") setSheetOpen(false);
+            if (event.key === "Escape") {
+                setSheetOpen(false);
+                return;
+            }
+            if (event.key !== "Tab" || !sheet) return;
+
+            const focusable = Array.from(
+                sheet.querySelectorAll(
+                    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )
+            );
+            if (focusable.length === 0) return;
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
         };
 
         window.addEventListener("keydown", handleKey);
         closeButtonRef.current?.focus();
-        return () => window.removeEventListener("keydown", handleKey);
+        return () => {
+            window.removeEventListener("keydown", handleKey);
+            contentsButtonRef.current?.focus();
+        };
     }, [sheetOpen]);
 
     const scrollToSection = (index) => {
@@ -240,6 +268,7 @@ const ReadingProgress = ({ targetRef, contentRef, resetKey }) => {
                         onClick={() => setSheetOpen(false)}
                     />
                     <div
+                        ref={sheetRef}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="article-contents-title"
